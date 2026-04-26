@@ -1,5 +1,6 @@
 import os
 import json
+import traceback
 import rawpy
 import exifread
 import numpy as np
@@ -11,13 +12,23 @@ from scipy.ndimage import map_coordinates, gaussian_filter
 def get_exif_all(filepath):
     with open(filepath, 'rb') as f:
         tags = exifread.process_file(f, details=False)
-    model = str(tags.get('Image Model', 'Unknown'))
+    model = str(tags.get('Image Model', 'Unknown')).strip()
     t_tag = tags.get('EXIF ExposureTime') or tags.get('Image ExposureTime')
     iso_tag = tags.get('EXIF ISOSpeedRatings') or tags.get('Image ISOSpeedRatings')
     date_tag = tags.get('EXIF DateTimeOriginal') or tags.get('Image DateTime')
-    t = float(t_tag.values[0].num)/float(t_tag.values[0].den) if t_tag and hasattr(t_tag.values[0], 'num') else 180.0
+    t = float(t_tag.values[0].num) / float(t_tag.values[0].den) if t_tag and hasattr(t_tag.values[0], 'num') else 180.0
     iso = float(iso_tag.values[0]) if iso_tag else 400.0
-    time_str = f"{str(date_tag).split(' ')[0].replace(':', '.')} {str(date_tag).split(' ')[1][:5]}" if date_tag else "Neznámý čas"
+    if not t_tag:
+        print(f"  VAROVÁNÍ: {os.path.basename(filepath)} nemá EXIF ExposureTime, používám default 180 s.")
+    if not iso_tag:
+        print(f"  VAROVÁNÍ: {os.path.basename(filepath)} nemá EXIF ISO, používám default ISO 400.")
+    if date_tag and " " in str(date_tag):
+        date_part, time_part = str(date_tag).split(" ", 1)
+        time_str = f"{date_part.replace(':', '.')} {time_part[:5]}"
+    elif date_tag:
+        time_str = str(date_tag)
+    else:
+        time_str = "Neznámý čas"
     return model, t, iso, time_str
 
 def fisheye_to_equirectangular_clean(data, center, radius, tilt_corr=0, out_shape=(1200, 3600)):
@@ -81,16 +92,27 @@ def process_images():
     master_dark = None
     dark_files = [f for f in os.listdir('vstup_dark') if f.lower().endswith('.cr2')]
     if dark_files:
-        darks = [rawpy.imread(os.path.join('vstup_dark', f)).raw_image.astype(np.float32) for f in dark_files]
+        darks = []
+        for dark_file in dark_files:
+            dark_path = os.path.join('vstup_dark', dark_file)
+            with rawpy.imread(dark_path) as dark_raw:
+                darks.append(dark_raw.raw_image.astype(np.float32))
         master_dark = np.mean(darks, axis=0)
 
     sky_files = [f for f in os.listdir('vstup_sky') if f.lower().endswith('.cr2')]
+    n_cmap, n_norm, l_cmap, l_norm = get_cmaps()
     for sf in sky_files:
         path = os.path.join('vstup_sky', sf)
         model, t, iso, f_date = get_exif_all(path)
-        if model not in full_cfg: continue
+        if model not in full_cfg:
+            print(f"Přeskakuji {sf}: model '{model}' není v config.json.")
+            continue
+        if t <= 0 or iso <= 0:
+            print(f"Přeskakuji {sf}: neplatné EXIF hodnoty t={t}, ISO={iso}.")
+            continue
         cfg = full_cfg[model]
         print(f"Zpracovávám: {sf} | Tilt: {cfg.get('tilt_correction', 0)}")
+        base_name, _ = os.path.splitext(sf)
         
         try:
             with rawpy.imread(path) as raw:
@@ -114,7 +136,6 @@ def process_images():
                 
                 zenit_val = np.nanmedian(mag_data[r_map < (rad * 0.2)])
                 label_base = f"Zenit: {zenit_val:.2f} MSA | {f_date} | {model}"
-                n_cmap, n_norm, l_cmap, l_norm = get_cmaps()
 
                 # --- 1. NPS Kruh ---
                 fig, ax = plt.subplots(figsize=(10, 11), facecolor='black')
@@ -126,7 +147,7 @@ def process_images():
                 fig.colorbar(img1, cax=cax1, orientation='horizontal', ticks=np.arange(17.5, 23.0, 0.5))
                 cax1.xaxis.set_tick_params(color='white', labelcolor='white', labelsize=8)
                 cax1.set_xlabel(f"Jas oblohy [mag/arcsec²] | {label_base}", color='white')
-                plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_NPS.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
+                plt.savefig(os.path.join('vystup', f'{base_name}_NPS.jpg'), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
 
                 # --- 2. LUM Kruh ---
@@ -142,7 +163,7 @@ def process_images():
                 cax2.set_xticklabels(l_labels, fontsize=7)
                 cax2.xaxis.set_tick_params(color='white', labelcolor='white')
                 cax2.set_xlabel(f"Jas oblohy [cd/m²] | {label_base}", color='white')
-                plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_lum.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
+                plt.savefig(os.path.join('vystup', f'{base_name}_lum.jpg'), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
 
                 # --- 3. PANO ---
@@ -157,12 +178,13 @@ def process_images():
                 cax3.xaxis.set_tick_params(color='white', labelcolor='white', labelsize=10)
                 cax3.set_xlabel("Jas oblohy [mag/arcsec²]", color='white')
                 plt.title(label_base, color='white', pad=20, fontsize=12)
-                plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_pano.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
+                plt.savefig(os.path.join('vystup', f'{base_name}_pano.jpg'), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
 
                 print(f"  Hotovo.")
         except Exception as e:
             print(f"  CHYBA: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     process_images()
