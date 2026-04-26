@@ -1,0 +1,16 @@
+{
+  "Canon EOS 600D": {
+    "calibration_constant": 20.73,
+    "circle_center": [2594, 1710],
+    "circle_radius": 1466,
+    "vignetting_coeff": 14.6,
+    "tilt_correction": 0
+  },
+  "Canon EOS 6D": {
+    "calibration_constant": 21.50,
+    "circle_center": [2736, 1824],
+    "circle_radius": 1600,
+    "vignetting_coeff": 45.0,
+    "tilt_correction": 0
+  }
+}
