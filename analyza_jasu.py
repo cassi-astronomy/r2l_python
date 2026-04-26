@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import rawpy
@@ -17,7 +18,7 @@ def get_exif_all(filepath):
     date_tag = tags.get('EXIF DateTimeOriginal') or tags.get('Image DateTime')
     t = float(t_tag.values[0].num)/float(t_tag.values[0].den) if t_tag and hasattr(t_tag.values[0], 'num') else 180.0
     iso = float(iso_tag.values[0]) if iso_tag else 400.0
-    time_str = f"{str(date_tag).split(' ')[0].replace(':', '.')} {str(date_tag).split(' ')[1][:5]}" if date_tag else "Neznámý čas"
+    time_str = f"{str(date_tag).split(' ')[0].replace(':', '.')} {str(date_tag).split(' ')[1][:5]}" if date_tag else "Neznamy cas"
     return model, t, iso, time_str
 
 def fisheye_to_equirectangular_clean(data, center, radius, tilt_corr=0, out_shape=(1200, 3600)):
@@ -34,7 +35,7 @@ def fisheye_to_equirectangular_clean(data, center, radius, tilt_corr=0, out_shap
 
 def get_cmaps():
     # 1. NPS Magnitudy - TVOJE BARVY (od 17.5 do 22.0)
-    # Seřazeno od nejsvětlejší (17.5) po nejtmavší (22.0)
+    # Serazeno od nejsvetlejsi (17.5) po nejtmavsi (22.0)
     pascal_hex_list = [
         '#ffffff', '#eafff0', '#e8fefc', '#e4ebfb', '#e9e1f9', '#d7bdd6', 
         '#e19bd7', '#e27dcd', '#dc60d2', '#d700d7', '#e600ba', '#e6007f', 
@@ -46,15 +47,15 @@ def get_cmaps():
         '#46003c', '#3c0019', '#3c0000', '#1e0000'
     ]
     
-    # Vytvoření ListedColormap z tvého seznamu
+    # Vytvoreni ListedColormap z tveho seznamu
     nps_cmap = ListedColormap(pascal_hex_list)
-    nps_cmap.set_over('#000000') # Nad 22.0 černá
-    nps_cmap.set_under('#FFFFFF') # Pod 17.5 bílá
+    nps_cmap.set_over('#000000') # Nad 22.0 cerna
+    nps_cmap.set_under('#FFFFFF') # Pod 17.5 bila
     
-    # Hranice pro 46 barev (47 dělících čar)
+    # Hranice pro 46 barev (47 delicich car)
     nps_norm = BoundaryNorm(np.linspace(17.5, 22.0, len(pascal_hex_list) + 1), nps_cmap.N)
     
-    # 2. LUM Kandely (8 dekád)
+    # 2. LUM Kandely (8 dekad)
     decade_bases = [
         ('#4B0082', '#8A2BE2'), ('#00008B', '#0000FF'), ('#008B8B', '#00FFFF'),
         ('#006400', '#228B22'), ('#32CD32', '#ADFF2F'), ('#CCCC00', '#FFFF00'),
@@ -90,7 +91,7 @@ def process_images():
         model, t, iso, f_date = get_exif_all(path)
         if model not in full_cfg: continue
         cfg = full_cfg[model]
-        print(f"Zpracovávám: {sf} | Tilt: {cfg.get('tilt_correction', 0)}")
+        print(f"Zpracovavam: {sf} | Tilt: {cfg.get('tilt_correction', 0)}")
         
         try:
             with rawpy.imread(path) as raw:
@@ -98,7 +99,7 @@ def process_images():
                 if master_dark is not None and data.shape == master_dark.shape:
                     data = np.clip(data - master_dark, 1.0, None)
 
-                # Velmi jemný filtr pro potlačení digitálního šumu mřížky
+                # Velmi jemny filtr pro potlaceni digitalniho sumu mrizky
                 data_subtle = gaussian_filter(data, sigma=0.5)
 
                 c_x, c_y = cfg['circle_center']; rad = cfg['circle_radius']
@@ -125,7 +126,7 @@ def process_images():
                 cax1 = make_axes_locatable(ax).append_axes("bottom", size="3%", pad=0.1)
                 fig.colorbar(img1, cax=cax1, orientation='horizontal', ticks=np.arange(17.5, 23.0, 0.5))
                 cax1.xaxis.set_tick_params(color='white', labelcolor='white', labelsize=8)
-                cax1.set_xlabel(f"Jas oblohy [mag/arcsec²] | {label_base}", color='white')
+                cax1.set_xlabel(f"Jas oblohy [mag/arcsec2] | {label_base}", color='white')
                 plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_NPS.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
 
@@ -141,7 +142,7 @@ def process_images():
                 cbar2 = fig.colorbar(img2, cax=cax2, orientation='horizontal', ticks=l_ticks)
                 cax2.set_xticklabels(l_labels, fontsize=7)
                 cax2.xaxis.set_tick_params(color='white', labelcolor='white')
-                cax2.set_xlabel(f"Jas oblohy [cd/m²] | {label_base}", color='white')
+                cax2.set_xlabel(f"Jas oblohy [cd/m^2] | {label_base}", color='white')
                 plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_lum.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
 
@@ -155,7 +156,7 @@ def process_images():
                 cax3 = make_axes_locatable(ax).append_axes("bottom", size="5%", pad=0.5)
                 fig.colorbar(img3, cax=cax3, orientation='horizontal', ticks=np.arange(17.5, 23.0, 0.5))
                 cax3.xaxis.set_tick_params(color='white', labelcolor='white', labelsize=10)
-                cax3.set_xlabel("Jas oblohy [mag/arcsec²]", color='white')
+                cax3.set_xlabel("Jas oblohy [mag/arcsec2]", color='white')
                 plt.title(label_base, color='white', pad=20, fontsize=12)
                 plt.savefig(os.path.join('vystup', sf.replace('.CR2', '_pano.jpg')), bbox_inches='tight', facecolor='black', dpi=300)
                 plt.close()
